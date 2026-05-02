@@ -120,13 +120,29 @@ Generate a Mermaid diagram (use \`graph TD\` or \`flowchart TD\` syntax) that sh
 - External services/integrations (databases, APIs, etc.)
 - Key relationships
 
-Rules:
-- Output ONLY the Mermaid diagram code, nothing else
+CRITICAL Mermaid syntax rules (violations cause parse errors):
+- Output ONLY the Mermaid diagram code, nothing else — no markdown fences, no explanation
 - Start with \`graph TD\` or \`flowchart TD\`
-- Use clear, descriptive node labels
-- Keep it readable (max 15-20 nodes)
+- Node label format: use square brackets for ALL labels — e.g. \`A[UserService]\`, \`B[REST API]\`
+- NEVER use parentheses in node labels — parentheses in labels break parsing. Use square brackets ONLY
+- NEVER use special characters in node labels: no (), no {}, no <>, no quotes, no colons, no slashes
+- Keep node IDs short and alphanumeric: e.g. A, B, C, API, DB, SVC1
+- Keep it readable: max 15-20 nodes total
 - Use subgraphs to group related components
-- Do not include markdown code fences, just the raw Mermaid syntax`;
+- Arrow syntax: use \`-->\` or \`-- label -->\` only
+- Valid example:
+  graph TD
+    subgraph Frontend
+      UI[React App]
+      Router[Wouter Router]
+    end
+    subgraph Backend
+      API[Express API]
+      DB[PostgreSQL]
+    end
+    UI --> Router
+    Router --> API
+    API --> DB`;
 
   const response = await ai.models.generateContent({
     model: MODEL,
