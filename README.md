@@ -6,8 +6,6 @@
 
 **RepoLens** is an AI-powered documentation agent that takes any public GitHub repository URL and automatically generates a professional README, inline docstrings, and an interactive architecture diagram — all in under 30 seconds.
 
-![RepoLens Home](screenshots/home.jpg)
-
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev/)
 [![Express](https://img.shields.io/badge/Express-5-000000?style=flat-square&logo=express&logoColor=white)](https://expressjs.com/)
@@ -33,8 +31,6 @@ Paste a GitHub repo URL. RepoLens clones it, reads the source files, detects the
 ## Screenshots
 
 ### Dashboard
-
-![Analysis Dashboard](screenshots/repo-overview.jpg)
 
 The repo page shows tech stack badges, file count, analysis date, and three tabs for the generated outputs. A live progress indicator tracks each pipeline stage: cloning → analyzing → generating → completed.
 
