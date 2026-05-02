@@ -32,6 +32,12 @@ Paste a GitHub repo URL. RepoLens clones it, reads the source files, detects the
 
 ## Screenshots
 
+### Overview
+
+![Repo Overview](screenshots/repo-overview.jpg)
+
+The repo page shows tech stack badges, file count, analysis date, and three tabs for the generated outputs. A live progress indicator tracks each pipeline stage: cloning → analyzing → generating → completed.
+
 ### Docstrings
 
 ![Docstrings Tab](screenshots/repo-docstrings.jpg)
