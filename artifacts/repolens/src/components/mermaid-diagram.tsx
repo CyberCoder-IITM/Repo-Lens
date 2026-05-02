@@ -95,11 +95,18 @@ function sanitizeChart(input: string): string {
       trimmed.includes("==>");
     if (isArrow) {
       let f = line;
+      // Convert -- ""label"" --> to -- label --> (LLM double-quoted labels)
+      f = f.replace(/--\s*""([^""]*)""(\s*-->)/g, "-- $1$2");
+      // Convert -- "label" --> to -- label -->
+      f = f.replace(/--\s*"([^"]*)"(\s*-->)/g, "-- $1$2");
+      // Strip any remaining double-quote chars
+      f = f.replace(/"/g, "");
       // Strip ": trailing text" after destination node ID
       f = f.replace(/(\s*-->\s*[A-Za-z0-9_]+)\s*:\s*[^\n]+$/, "$1");
       // Strip parenthesised groups from inline arrow labels
       f = f.replace(/\([^)]*\)/g, "");
-      // Strip stray colons that remain
+      // Strip stray pipe chars and colons
+      f = f.replace(/\|/g, "");
       f = f.replace(/\s:\s*/g, " ");
       return f.trimEnd();
     }

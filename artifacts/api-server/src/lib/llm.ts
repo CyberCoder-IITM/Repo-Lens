@@ -163,24 +163,28 @@ function sanitizeMermaidDiagram(raw: string): string {
         return `${indent}subgraph ${cleanSubgraphName(nameRaw)}`;
       }
 
-      // Arrow lines: strip ": suffix" and parens from labels
+      // Arrow lines: strip ": suffix", quoted labels, and parens
       const isArrow =
         trimmed.includes("-->") ||
         trimmed.includes("---") ||
         trimmed.includes("-.->") ||
         trimmed.includes("==>");
       if (isArrow) {
-        let fixed = line;
+        let f = line;
+        // Convert -- ""label"" --> to -- label --> (LLM sometimes uses double-quoted labels)
+        f = f.replace(/--\s*""([^""]*)""(\s*-->)/g, "-- $1$2");
+        // Convert -- "label" --> to -- label -->
+        f = f.replace(/--\s*"([^"]*)"(\s*-->)/g, "-- $1$2");
+        // Strip any remaining double-quote chars on arrow lines
+        f = f.replace(/"/g, "");
         // Remove ": trailing text" after destination node
-        fixed = fixed.replace(
-          /(\s*-->\s*[A-Za-z0-9_]+)\s*:\s*[^\n]+$/,
-          "$1",
-        );
-        // Remove parenthesised groups from inline arrow labels: -- text (stuff) -->
-        fixed = fixed.replace(/\([^)]*\)/g, "");
-        // Remove stray colons
-        fixed = fixed.replace(/(?<=\s):\s*/g, "");
-        return fixed.trimEnd();
+        f = f.replace(/(\s*-->\s*[A-Za-z0-9_]+)\s*:\s*[^\n]+$/, "$1");
+        // Remove parenthesised groups from inline arrow labels
+        f = f.replace(/\([^)]*\)/g, "");
+        // Remove stray colons and pipe chars
+        f = f.replace(/(?<=\s):\s*/g, "");
+        f = f.replace(/\|/g, "");
+        return f.trimEnd();
       }
 
       // Node definition
