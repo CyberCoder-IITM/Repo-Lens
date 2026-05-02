@@ -11,10 +11,13 @@ let mermaidInitialized = false;
 /** Clean a node label — strips all special chars Mermaid can't handle inside labels */
 function cleanLabel(raw: string): string {
   return raw
-    .replace(/<br\s*\/?>/gi, " ")   // <br> → space
-    .replace(/<[^>]+>/g, "")        // other HTML tags
-    .replace(/[(){}[\]<>]/g, "")    // all bracket types
-    .replace(/\s{2,}/g, " ")        // collapse multiple spaces
+    .replace(/<br\s*\/?>/gi, " ")      // <br> → space
+    .replace(/<[^>]+>/g, "")           // other HTML tags
+    .replace(/[(){}[\]<>]/g, "")       // all bracket types
+    .replace(/&/g, "and")              // & → and
+    .replace(/:/g, " -")               // colons break some parsers → dash
+    .replace(/[|"'\\^~`]/g, "")        // other special chars
+    .replace(/\s{2,}/g, " ")           // collapse multiple spaces
     .trim();
 }
 
@@ -53,16 +56,29 @@ function sanitizeChart(input: string): string {
     const trimmed = line.trim();
     const indent = line.slice(0, line.length - line.trimStart().length);
 
-    // Pass-through: blank, directives, subgraph wrappers
+    // Pass-through: blank lines and diagram type declarations
     if (
       !trimmed ||
       trimmed.startsWith("%%") ||
       trimmed.startsWith("graph ") ||
       trimmed.startsWith("flowchart ") ||
-      trimmed.startsWith("subgraph ") ||
       trimmed === "end"
     ) {
       return line;
+    }
+
+    // Subgraph lines — strip parentheses, colons, and special chars from the name
+    if (trimmed.startsWith("subgraph")) {
+      const nameRaw = trimmed.slice("subgraph".length).trim();
+      if (!nameRaw) return line; // bare "subgraph" keyword
+      const nameCleaned = nameRaw
+        .replace(/[(){}[\]<>]/g, "")
+        .replace(/:/g, " -")
+        .replace(/&/g, "and")
+        .replace(/[|"'\\^~`]/g, "")
+        .replace(/\s{2,}/g, " ")
+        .trim();
+      return `${indent}subgraph ${nameCleaned}`;
     }
 
     // Arrow/edge lines — fix invalid ": label" suffix (e.g. "A --> B: Loads")
@@ -94,7 +110,17 @@ function sanitizeChart(input: string): string {
     return line;
   });
 
-  return fixed.join("\n");
+  let result = fixed.join("\n");
+
+  // Balance unclosed subgraphs — count subgraph vs end occurrences and append missing ends
+  const subgraphCount = (result.match(/^\s*subgraph\b/gm) ?? []).length;
+  const endCount = (result.match(/^\s*end\s*$/gm) ?? []).length;
+  const missing = subgraphCount - endCount;
+  if (missing > 0) {
+    result += "\n" + "end\n".repeat(missing);
+  }
+
+  return result;
 }
 
 export function MermaidDiagram({ chart }: MermaidDiagramProps) {

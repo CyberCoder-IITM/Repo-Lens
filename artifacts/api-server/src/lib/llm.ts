@@ -120,17 +120,16 @@ Generate a Mermaid diagram (use \`graph TD\` or \`flowchart TD\` syntax) that sh
 - External services/integrations (databases, APIs, etc.)
 - Key relationships
 
-CRITICAL Mermaid syntax rules (violations cause parse errors):
-- Output ONLY the Mermaid diagram code, nothing else — no markdown fences, no explanation
-- Start with \`graph TD\` or \`flowchart TD\`
-- Node label format: use square brackets for ALL labels — e.g. \`A[UserService]\`, \`B[REST API]\`
-- NEVER use parentheses in node labels — parentheses in labels break parsing. Use square brackets ONLY
-- NEVER use special characters in node labels: no (), no {}, no <>, no quotes, no colons, no slashes
-- Keep node IDs short and alphanumeric: e.g. A, B, C, API, DB, SVC1
+CRITICAL Mermaid syntax rules — every violation causes a parse error:
+- Output ONLY the raw Mermaid diagram code, nothing else — no markdown fences, no prose
+- Start with \`graph TD\`
+- Node IDs: short alphanumeric only — e.g. A, B, SVC1, DB, API (no spaces, no special chars)
+- Node labels: use ONLY square brackets — e.g. \`A[UserService]\`
+- FORBIDDEN in node labels: ( ) { } [ ] < > : & | " ' / \\ — use plain words only
+- FORBIDDEN in subgraph names: ( ) { } < > : & — use plain words only, e.g. \`subgraph DataProcessing\`
+- Arrow labels: use \`A -- label --> B\` or \`A --> B\` only — NEVER \`A --> B: label\`
 - Keep it readable: max 15-20 nodes total
-- Use subgraphs to group related components
-- Arrow syntax: use \`-->\` or \`-- label -->\` only
-- Valid example:
+- Valid example (follow this pattern exactly):
   graph TD
     subgraph Frontend
       UI[React App]
@@ -141,7 +140,7 @@ CRITICAL Mermaid syntax rules (violations cause parse errors):
       DB[PostgreSQL]
     end
     UI --> Router
-    Router --> API
+    Router -- HTTP --> API
     API --> DB`;
 
   const response = await ai.models.generateContent({
