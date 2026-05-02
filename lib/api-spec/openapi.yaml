@@ -3,13 +3,15 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: RepoLens API specification
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: repos
+    description: Repository analysis operations
 paths:
   /healthz:
     get:
@@ -24,6 +26,104 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /repos:
+    get:
+      operationId: listRepos
+      tags: [repos]
+      summary: List all analyzed repositories
+      responses:
+        "200":
+          description: List of repositories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Repo"
+
+  /repos/analyze:
+    post:
+      operationId: analyzeRepo
+      tags: [repos]
+      summary: Start analysis of a GitHub repository
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnalyzeRepoBody"
+      responses:
+        "202":
+          description: Analysis started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Repo"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /repos/{id}:
+    get:
+      operationId: getRepo
+      tags: [repos]
+      summary: Get a repository by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Repository details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Repo"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /repos/{id}/status:
+    get:
+      operationId: getRepoStatus
+      tags: [repos]
+      summary: Poll analysis status for a repo
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Current status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RepoStatus"
+
+  /repos/stats/summary:
+    get:
+      operationId: getReposSummary
+      tags: [repos]
+      summary: Get aggregate stats across all analyzed repos
+      responses:
+        "200":
+          description: Summary stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReposSummary"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +134,123 @@ components:
       required:
         - status
 
+    AnalyzeRepoBody:
+      type: object
+      properties:
+        repoUrl:
+          type: string
+          description: Public GitHub repository URL
+      required:
+        - repoUrl
+
+    Repo:
+      type: object
+      properties:
+        id:
+          type: integer
+        repoUrl:
+          type: string
+        repoName:
+          type: string
+        owner:
+          type: string
+        status:
+          type: string
+          enum: [pending, cloning, analyzing, generating, completed, failed]
+        techStack:
+          type: array
+          items:
+            type: string
+          nullable: true
+        fileCount:
+          type: integer
+          nullable: true
+        generatedReadme:
+          type: string
+          nullable: true
+        generatedDocstrings:
+          type: string
+          nullable: true
+        generatedArchitecture:
+          type: string
+          nullable: true
+        errorMessage:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - repoUrl
+        - repoName
+        - owner
+        - status
+        - createdAt
+        - updatedAt
+
+    RepoStatus:
+      type: object
+      properties:
+        id:
+          type: integer
+        status:
+          type: string
+          enum: [pending, cloning, analyzing, generating, completed, failed]
+        progress:
+          type: integer
+          description: 0-100
+        currentStep:
+          type: string
+          nullable: true
+        errorMessage:
+          type: string
+          nullable: true
+      required:
+        - id
+        - status
+        - progress
+
+    ReposSummary:
+      type: object
+      properties:
+        totalRepos:
+          type: integer
+        completedRepos:
+          type: integer
+        failedRepos:
+          type: integer
+        pendingRepos:
+          type: integer
+        popularTechStack:
+          type: array
+          items:
+            type: object
+            properties:
+              tech:
+                type: string
+              count:
+                type: integer
+            required:
+              - tech
+              - count
+      required:
+        - totalRepos
+        - completedRepos
+        - failedRepos
+        - pendingRepos
+        - popularTechStack
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+      required:
+        - error
+        - message
