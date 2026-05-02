@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "al3J3G9N2j4ul6OjQFrxl"
+uri = "file://README.md"
+type = "text"
+title = "RepoLens README"
