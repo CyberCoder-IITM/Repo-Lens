@@ -8,6 +8,37 @@ interface MermaidDiagramProps {
 
 let mermaidInitialized = false;
 
+/** Clean a node label — strips all special chars Mermaid can't handle inside labels */
+function cleanLabel(raw: string): string {
+  return raw
+    .replace(/<br\s*\/?>/gi, " ")   // <br> → space
+    .replace(/<[^>]+>/g, "")        // other HTML tags
+    .replace(/[(){}[\]<>]/g, "")    // all bracket types
+    .replace(/\s{2,}/g, " ")        // collapse multiple spaces
+    .trim();
+}
+
+/**
+ * Extract the label from a node shape, handling all Mermaid shape types:
+ *   A[label]  A(label)  A((label))  A{label}  A>label]  A([label])
+ * Returns { label, rest } where rest is anything after the closing bracket.
+ */
+function extractNodeLabel(after: string): string {
+  // Find the first opening bracket character
+  const openIdx = after.search(/[\[({>]/);
+  if (openIdx === -1) return after.trim();
+
+  const open = after[openIdx];
+  const closeMap: Record<string, string> = { "[": "]", "(": ")", "{": "}", ">": "]" };
+  const close = closeMap[open] ?? "]";
+
+  // Find the LAST occurrence of the closing character (handles nested brackets)
+  const closeIdx = after.lastIndexOf(close);
+  if (closeIdx === -1) return after.trim();
+
+  return after.slice(openIdx + 1, closeIdx);
+}
+
 function sanitizeChart(input: string): string {
   // Strip markdown code fences
   let chart = input
@@ -16,29 +47,54 @@ function sanitizeChart(input: string): string {
     .replace(/```\s*$/m, "")
     .trim();
 
-  // Replace <br> tags with a space (common LLM mistake in labels)
-  chart = chart.replace(/<br\s*\/?>/gi, " ");
+  const lines = chart.split("\n");
 
-  // Remove any remaining HTML tags inside labels
-  chart = chart.replace(/<[^>]+>/g, "");
+  const fixed = lines.map((line) => {
+    const trimmed = line.trim();
+    const indent = line.slice(0, line.length - line.trimStart().length);
 
-  // Strip parentheses from inside [] labels — e.g. A[Entry (main.py)] → A[Entry main.py]
-  chart = chart.replace(/\[([^\]]*)\]/g, (_match, content) => {
-    return `[${content.replace(/[()]/g, "")}]`;
+    // Pass-through: blank, directives, subgraph wrappers
+    if (
+      !trimmed ||
+      trimmed.startsWith("%%") ||
+      trimmed.startsWith("graph ") ||
+      trimmed.startsWith("flowchart ") ||
+      trimmed.startsWith("subgraph ") ||
+      trimmed === "end"
+    ) {
+      return line;
+    }
+
+    // Arrow/edge lines — fix invalid ": label" suffix (e.g. "A --> B: Loads")
+    // Valid Mermaid label syntax is "A -- Loads --> B", not "A --> B: Loads"
+    const isArrow =
+      trimmed.includes("-->") ||
+      trimmed.includes("---") ||
+      trimmed.includes("-.->") ||
+      trimmed.includes("==>");
+    if (isArrow) {
+      // Convert "A --> B: Label" → "A -- Label --> B"
+      const colonLabelFix = line.replace(
+        /^(\s*)(.+?)\s*-->\s*([A-Za-z0-9_[\]]+):\s*(.+)$/,
+        "$1$2 -- $4 --> $3",
+      );
+      if (colonLabelFix !== line) return colonLabelFix;
+      return line;
+    }
+
+    // Node definition: starts with an alphanumeric ID followed by a shape bracket
+    const nodeMatch = trimmed.match(/^([A-Za-z0-9_]+)([\[({>].*)$/s);
+    if (nodeMatch) {
+      const nodeId = nodeMatch[1];
+      const rawLabel = extractNodeLabel(nodeMatch[2]);
+      const cleanedLabel = cleanLabel(rawLabel);
+      return `${indent}${nodeId}[${cleanedLabel}]`;
+    }
+
+    return line;
   });
 
-  // Strip parentheses and <> from inside {} diamond labels
-  chart = chart.replace(/\{([^}]*)\}/g, (_match, content) => {
-    return `{${content.replace(/[()<>]/g, "")}}`;
-  });
-
-  // Convert remaining round-bracket node shapes to square brackets: A(label) → A[label]
-  // This handles cases like C(Env Variables) → C[Env Variables]
-  chart = chart.replace(/^(\s*[A-Za-z0-9_]+)\(([^)\n]+)\)/gm, (_match, id, content) => {
-    return `${id}[${content.replace(/[()]/g, "")}]`;
-  });
-
-  return chart;
+  return fixed.join("\n");
 }
 
 export function MermaidDiagram({ chart }: MermaidDiagramProps) {
