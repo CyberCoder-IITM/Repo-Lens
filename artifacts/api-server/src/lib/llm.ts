@@ -93,6 +93,198 @@ Output the documentation as formatted text with clear file sections. Use proper 
   return response.text ?? "";
 }
 
+// ── Server-side Mermaid sanitizer (runs before DB storage) ───────────────────
+
+function cleanMermaidLabel(raw: string): string {
+  return raw
+    .replace(/<br\s*\/?>/gi, " ")
+    .replace(/<[^>]+>/g, "")
+    .replace(/[(){}[\]<>&:|"'\\^~`]/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim()
+    .slice(0, 60);
+}
+
+function cleanSubgraphName(raw: string): string {
+  return raw
+    .replace(/[(){}[\]<>&:|"'\\^~`]/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim()
+    .slice(0, 40);
+}
+
+function extractMermaidLabel(after: string): string {
+  const openIdx = after.search(/[\[({>]/);
+  if (openIdx === -1) return after.trim();
+  const open = after[openIdx];
+  const closeMap: Record<string, string> = { "[": "]", "(": ")", "{": "}", ">": "]" };
+  const close = closeMap[open] ?? "]";
+  const closeIdx = after.lastIndexOf(close);
+  if (closeIdx === -1) return after.trim();
+  return after.slice(openIdx + 1, closeIdx);
+}
+
+function sanitizeMermaidDiagram(raw: string): string {
+  // Strip markdown fences
+  let text = raw
+    .replace(/^```mermaid\s*/m, "")
+    .replace(/^```\s*/m, "")
+    .replace(/```\s*$/m, "")
+    .trim();
+
+  const lines = text.split("\n");
+
+  const fixed = lines
+    .filter((line) => {
+      const t = line.trim();
+      // Drop style, classDef, class, click, linkStyle — these can contain
+      // hex colours and special chars that trip up the parser
+      if (/^(style|classDef|class|click|linkStyle)\s/.test(t)) return false;
+      return true;
+    })
+    .map((line) => {
+      const trimmed = line.trim();
+      const indent = line.slice(0, line.length - line.trimStart().length);
+
+      if (
+        !trimmed ||
+        trimmed.startsWith("%%") ||
+        trimmed.startsWith("graph ") ||
+        trimmed.startsWith("flowchart ") ||
+        trimmed === "end"
+      ) {
+        return line;
+      }
+
+      // Subgraph: clean the name
+      if (trimmed.startsWith("subgraph")) {
+        const nameRaw = trimmed.slice("subgraph".length).trim();
+        if (!nameRaw) return line;
+        return `${indent}subgraph ${cleanSubgraphName(nameRaw)}`;
+      }
+
+      // Arrow lines: strip ": suffix" and parens from labels
+      const isArrow =
+        trimmed.includes("-->") ||
+        trimmed.includes("---") ||
+        trimmed.includes("-.->") ||
+        trimmed.includes("==>");
+      if (isArrow) {
+        let fixed = line;
+        // Remove ": trailing text" after destination node
+        fixed = fixed.replace(
+          /(\s*-->\s*[A-Za-z0-9_]+)\s*:\s*[^\n]+$/,
+          "$1",
+        );
+        // Remove parenthesised groups from inline arrow labels: -- text (stuff) -->
+        fixed = fixed.replace(/\([^)]*\)/g, "");
+        // Remove stray colons
+        fixed = fixed.replace(/(?<=\s):\s*/g, "");
+        return fixed.trimEnd();
+      }
+
+      // Node definition
+      const nodeMatch = trimmed.match(/^([A-Za-z0-9_]+)([\[({>].*)$/s);
+      if (nodeMatch) {
+        const nodeId = nodeMatch[1];
+        const rawLabel = extractMermaidLabel(nodeMatch[2]);
+        return `${indent}${nodeId}[${cleanMermaidLabel(rawLabel)}]`;
+      }
+
+      return line;
+    });
+
+  let result = fixed.join("\n");
+
+  // Balance unclosed subgraphs
+  const sgCount = (result.match(/^\s*subgraph\b/gm) ?? []).length;
+  const endCount = (result.match(/^\s*end\s*$/gm) ?? []).length;
+  const missing = sgCount - endCount;
+  if (missing > 0) result += "\n" + "end\n".repeat(missing);
+
+  return result;
+}
+
+// ── Types for the structured diagram JSON the LLM returns ───────────────────
+
+interface DiagramNode {
+  id: string;
+  label: string;
+}
+
+interface DiagramSubgraph {
+  name: string;
+  nodes: DiagramNode[];
+}
+
+interface DiagramEdge {
+  from: string;
+  to: string;
+  label?: string;
+}
+
+interface DiagramJson {
+  subgraphs?: DiagramSubgraph[];
+  nodes?: DiagramNode[];
+  edges?: DiagramEdge[];
+}
+
+// ── Safe string helpers ───────────────────────────────────────────────────────
+
+function safeId(raw: string): string {
+  // Keep only alphanumeric + underscore, ensure it starts with a letter
+  const clean = raw.replace(/[^a-zA-Z0-9_]/g, "");
+  return /^[a-zA-Z]/.test(clean) ? clean : "N" + clean;
+}
+
+function safeLabel(raw: string): string {
+  return raw
+    .replace(/[[\](){}|"'<>&:]/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim()
+    .slice(0, 60); // cap length for readability
+}
+
+function safeName(raw: string): string {
+  return raw
+    .replace(/[[\](){}|"'<>&:]/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim()
+    .slice(0, 40);
+}
+
+// ── Convert structured JSON → valid Mermaid ───────────────────────────────────
+
+function buildMermaidFromJson(data: DiagramJson): string {
+  const lines: string[] = ["graph TD"];
+
+  for (const sg of data.subgraphs ?? []) {
+    lines.push(`  subgraph ${safeName(sg.name)}`);
+    for (const node of sg.nodes ?? []) {
+      lines.push(`    ${safeId(node.id)}[${safeLabel(node.label)}]`);
+    }
+    lines.push("  end");
+  }
+
+  for (const node of data.nodes ?? []) {
+    lines.push(`  ${safeId(node.id)}[${safeLabel(node.label)}]`);
+  }
+
+  for (const edge of data.edges ?? []) {
+    const from = safeId(edge.from);
+    const to = safeId(edge.to);
+    if (edge.label) {
+      lines.push(`  ${from} -- ${safeLabel(edge.label)} --> ${to}`);
+    } else {
+      lines.push(`  ${from} --> ${to}`);
+    }
+  }
+
+  return lines.join("\n");
+}
+
+// ── Main export ───────────────────────────────────────────────────────────────
+
 export async function generateArchitectureDiagram(params: {
   repoName: string;
   techStack: string[];
@@ -101,7 +293,7 @@ export async function generateArchitectureDiagram(params: {
 }): Promise<string> {
   const fileContext = buildFileContext(params.files, 40000);
 
-  const prompt = `You are a senior software architect. Analyze the following repository and generate a Mermaid.js architecture diagram that shows the high-level structure and data flow.
+  const prompt = `You are a senior software architect. Analyze the following repository and return a JSON object describing the system architecture.
 
 Repository: ${params.repoName}
 Tech Stack: ${params.techStack.join(", ")}
@@ -114,34 +306,44 @@ ${params.directoryTree}
 Key Source Files:
 ${fileContext}
 
-Generate a Mermaid diagram (use \`graph TD\` or \`flowchart TD\` syntax) that shows:
-- Main system components/modules
-- Data flow between components
-- External services/integrations (databases, APIs, etc.)
-- Key relationships
+Return ONLY a valid JSON object (no markdown, no explanation) with this exact structure:
+{
+  "subgraphs": [
+    {
+      "name": "Frontend",
+      "nodes": [
+        { "id": "UI", "label": "React App" },
+        { "id": "Router", "label": "Client Router" }
+      ]
+    },
+    {
+      "name": "Backend",
+      "nodes": [
+        { "id": "API", "label": "Express API" },
+        { "id": "DB", "label": "PostgreSQL" }
+      ]
+    }
+  ],
+  "nodes": [
+    { "id": "EXT", "label": "External API" }
+  ],
+  "edges": [
+    { "from": "UI", "to": "Router" },
+    { "from": "Router", "to": "API", "label": "HTTP" },
+    { "from": "API", "to": "DB" },
+    { "from": "API", "to": "EXT", "label": "REST" }
+  ]
+}
 
-CRITICAL Mermaid syntax rules — every violation causes a parse error:
-- Output ONLY the raw Mermaid diagram code, nothing else — no markdown fences, no prose
-- Start with \`graph TD\`
-- Node IDs: short alphanumeric only — e.g. A, B, SVC1, DB, API (no spaces, no special chars)
-- Node labels: use ONLY square brackets — e.g. \`A[UserService]\`
-- FORBIDDEN in node labels: ( ) { } [ ] < > : & | " ' / \\ — use plain words only
-- FORBIDDEN in subgraph names: ( ) { } < > : & — use plain words only, e.g. \`subgraph DataProcessing\`
-- Arrow labels: use \`A -- label --> B\` or \`A --> B\` only — NEVER \`A --> B: label\`
-- Keep it readable: max 15-20 nodes total
-- Valid example (follow this pattern exactly):
-  graph TD
-    subgraph Frontend
-      UI[React App]
-      Router[Wouter Router]
-    end
-    subgraph Backend
-      API[Express API]
-      DB[PostgreSQL]
-    end
-    UI --> Router
-    Router -- HTTP --> API
-    API --> DB`;
+Rules:
+- "subgraphs": logical groups of related components (e.g. Frontend, Backend, Database, External Services)
+- "nodes": standalone components not in any subgraph
+- "edges": data flow connections between node IDs
+- node "id" values: short alphanumeric, no spaces (e.g. "API", "DB", "AuthSvc")
+- node "label" values: plain English description, no special characters
+- edge "label": optional, short verb phrase (e.g. "HTTP", "SQL", "WebSocket")
+- max 15-20 nodes total across all subgraphs and standalone nodes
+- ALL node IDs used in edges must exist in subgraphs or nodes`;
 
   const response = await ai.models.generateContent({
     model: MODEL,
@@ -149,9 +351,21 @@ CRITICAL Mermaid syntax rules — every violation causes a parse error:
     config: { maxOutputTokens: 4096 },
   });
 
-  let diagram = response.text ?? "";
-  // Strip any markdown code fences if the model added them
-  diagram = diagram.replace(/^```mermaid\n?/m, "").replace(/^```\n?/m, "").replace(/```$/m, "").trim();
+  const raw = (response.text ?? "").trim();
 
-  return diagram;
+  // Extract JSON — strip any accidental markdown fences
+  const jsonText = raw
+    .replace(/^```json\s*/m, "")
+    .replace(/^```\s*/m, "")
+    .replace(/```\s*$/m, "")
+    .trim();
+
+  try {
+    const data: DiagramJson = JSON.parse(jsonText);
+    // JSON path — programmatically built Mermaid, already clean
+    return buildMermaidFromJson(data);
+  } catch {
+    // Fallback: model returned raw Mermaid — sanitize it before storing
+    return sanitizeMermaidDiagram(jsonText);
+  }
 }

@@ -52,9 +52,15 @@ function sanitizeChart(input: string): string {
 
   const lines = chart.split("\n");
 
-  const fixed = lines.map((line) => {
+  const fixed = lines.map((line): string | null => {
     const trimmed = line.trim();
     const indent = line.slice(0, line.length - line.trimStart().length);
+
+    // Drop style/class/click/linkStyle directives — hex colours and special
+    // chars inside them confuse the parser
+    if (/^(style|classDef|class|click|linkStyle)\s/.test(trimmed)) {
+      return null;
+    }
 
     // Pass-through: blank lines and diagram type declarations
     if (
@@ -81,21 +87,21 @@ function sanitizeChart(input: string): string {
       return `${indent}subgraph ${nameCleaned}`;
     }
 
-    // Arrow/edge lines — fix invalid ": label" suffix (e.g. "A --> B: Loads")
-    // Valid Mermaid label syntax is "A -- Loads --> B", not "A --> B: Loads"
+    // Arrow/edge lines — clean up problematic syntax
     const isArrow =
       trimmed.includes("-->") ||
       trimmed.includes("---") ||
       trimmed.includes("-.->") ||
       trimmed.includes("==>");
     if (isArrow) {
-      // Convert "A --> B: Label" → "A -- Label --> B"
-      const colonLabelFix = line.replace(
-        /^(\s*)(.+?)\s*-->\s*([A-Za-z0-9_[\]]+):\s*(.+)$/,
-        "$1$2 -- $4 --> $3",
-      );
-      if (colonLabelFix !== line) return colonLabelFix;
-      return line;
+      let f = line;
+      // Strip ": trailing text" after destination node ID
+      f = f.replace(/(\s*-->\s*[A-Za-z0-9_]+)\s*:\s*[^\n]+$/, "$1");
+      // Strip parenthesised groups from inline arrow labels
+      f = f.replace(/\([^)]*\)/g, "");
+      // Strip stray colons that remain
+      f = f.replace(/\s:\s*/g, " ");
+      return f.trimEnd();
     }
 
     // Node definition: starts with an alphanumeric ID followed by a shape bracket
@@ -110,7 +116,7 @@ function sanitizeChart(input: string): string {
     return line;
   });
 
-  let result = fixed.join("\n");
+  let result = fixed.filter((l): l is string => l !== null).join("\n");
 
   // Balance unclosed subgraphs — count subgraph vs end occurrences and append missing ends
   const subgraphCount = (result.match(/^\s*subgraph\b/gm) ?? []).length;
