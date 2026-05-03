@@ -14,7 +14,8 @@ import {
   CheckCircle2,
   Clock,
   Loader2,
-  RefreshCw
+  RefreshCw,
+  XCircle
 } from "lucide-react";
 
 import { 
@@ -139,7 +140,7 @@ export default function RepoDashboard() {
                   <Github className="w-8 h-8 text-muted-foreground" />
                   {repo?.repoName}
                 </h1>
-                <div className="flex items-center gap-4 text-sm font-mono text-muted-foreground">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm font-mono text-muted-foreground">
                   <a 
                     href={repo?.repoUrl} 
                     target="_blank" 
@@ -237,23 +238,29 @@ export default function RepoDashboard() {
             <TabsList className="bg-card/50 border border-border w-full justify-start rounded-t-xl rounded-b-none p-1 h-auto flex-wrap gap-1">
               <TabsTrigger 
                 value="readme" 
-                className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary font-mono text-sm py-2 px-4 rounded-md"
+                className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary font-mono text-xs md:text-sm py-2 px-3 md:px-4 rounded-md"
               >
-                <FileText className="w-4 h-4 mr-2" /> Overview
+                <FileText className="w-4 h-4 md:mr-2" />
+                <span className="hidden md:inline">Overview</span>
+                <span className="inline md:hidden text-xs ml-1">Overview</span>
               </TabsTrigger>
               <TabsTrigger 
                 value="docstrings" 
-                className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary font-mono text-sm py-2 px-4 rounded-md"
+                className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary font-mono text-xs md:text-sm py-2 px-3 md:px-4 rounded-md"
                 disabled={!repo?.generatedDocstrings}
               >
-                <Code2 className="w-4 h-4 mr-2" /> Docstrings
+                <Code2 className="w-4 h-4 md:mr-2" />
+                <span className="hidden md:inline">Docstrings</span>
+                <span className="inline md:hidden text-xs ml-1">Docs</span>
               </TabsTrigger>
               <TabsTrigger 
                 value="architecture" 
-                className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary font-mono text-sm py-2 px-4 rounded-md"
+                className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary font-mono text-xs md:text-sm py-2 px-3 md:px-4 rounded-md"
                 disabled={!repo?.generatedArchitecture}
               >
-                <GitMerge className="w-4 h-4 mr-2" /> Architecture
+                <GitMerge className="w-4 h-4 md:mr-2" />
+                <span className="hidden md:inline">Architecture</span>
+                <span className="inline md:hidden text-xs ml-1">Arch</span>
               </TabsTrigger>
             </TabsList>
             

@@ -68,7 +68,7 @@ export default function Home() {
           <h1 className="text-4xl md:text-6xl font-bold tracking-tight mb-4 text-transparent bg-clip-text bg-gradient-to-r from-primary to-cyan-400">
             Understand any codebase.
           </h1>
-          <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-8 font-mono">
+          <p className="text-base md:text-xl text-muted-foreground max-w-2xl mx-auto mb-8 font-mono px-2">
             Automated architecture mapping, documentation generation, and structural analysis for GitHub repositories.
           </p>
 
@@ -115,7 +115,7 @@ export default function Home() {
         </div>
 
         {/* Stats Section */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-16 animate-in fade-in slide-in-from-bottom-8 duration-1000 delay-150 fill-mode-both">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-12 md:mb-16 animate-in fade-in slide-in-from-bottom-8 duration-1000 delay-150 fill-mode-both">
           <Card className="bg-card/40 backdrop-blur-md border-primary/20">
             <CardHeader className="pb-2 flex flex-row items-center justify-between">
               <CardTitle className="text-sm font-mono font-medium text-muted-foreground">Total Analyzed</CardTitle>
